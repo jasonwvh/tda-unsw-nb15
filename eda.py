@@ -156,25 +156,17 @@ distances = distances[:, 1]
 ### Takens with separate benigns and attacks
 dim = len(atts)
 
-b_sliced = b_agg[atts].iloc[:int(b_agg.index.size)]
-a_sliced = a_agg[atts].iloc[:int(a_agg.index.size)]
+b_sliced = b_agg[atts].iloc[:int(b_agg.index.size/10)]
+a_sliced = a_agg[atts].iloc[:int(a_agg.index.size/10)]
 
 b_scaled = scaler.fit_transform(b_sliced)
 b_scaled = pd.DataFrame(b_scaled, index=b_sliced.index, columns=atts)
 a_scaled = scaler.fit_transform(a_sliced)
 a_scaled = pd.DataFrame(a_scaled, index=a_sliced.index, columns=atts)
 
-te = TakensEmbedding(time_delay=1, dimension=3)
+te = TakensEmbedding(time_delay=1, dimension=5)
 b_embeddings = te.fit_transform(b_scaled)
 a_embeddings = te.fit_transform(a_scaled)
-# b_embeddings = b_embeddings.reshape(b_scaled.index.size, dim)[None, :, :]
-# a_embeddings = a_embeddings.reshape(a_scaled.index.size, dim)[None, :, :]
-
-# reducer = umap.UMAP()
-# b_embeddings = reducer.fit_transform(b_scaled)
-# a_embeddings = reducer.fit_transform(a_scaled)
-# b_embeddings = b_embeddings[None, :, :]
-# a_embeddings = a_embeddings[None, :, :]
 
 ph = VietorisRipsPersistence(homology_dimensions=[0, 1, 2])
 b_diagrams = ph.fit_transform(b_embeddings)
@@ -208,63 +200,53 @@ plt.grid(True)
 plt.show()
 
 ### Persistence landscapes
-pl = PersistenceLandscape()
-b_ls = pl.fit_transform(b_diagrams)
-a_ls = pl.fit_transform(a_diagrams)
+# pl = PersistenceLandscape()
+# b_ls = pl.fit_transform(b_diagrams)
+# a_ls = pl.fit_transform(a_diagrams)
 
-fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-for i in range(b_ls.shape[1]):
-    ax[0].plot(b_ls[0, i], label=f'Benign')
-    ax[0].set_title('Persistence Landscapes (H0, H1, H2) benign')
-for i in range(a_ls.shape[1]):
-    ax[1].plot(a_ls[0, i], label=f'Attack')
-    ax[1].set_title('Persistence Landscapes (H0, H1, H2) attack')
-plt.show()
+# fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+# for i in range(b_ls.shape[1]):
+#     ax[0].plot(b_ls[0, i], label=f'Benign')
+#     ax[0].set_title('Persistence Landscapes (H0, H1, H2) benign')
+# for i in range(a_ls.shape[1]):
+#     ax[1].plot(a_ls[0, i], label=f'Attack')
+#     ax[1].set_title('Persistence Landscapes (H0, H1, H2) attack')
+# plt.show()
 
 
 ### Euler Characteristic Profile
-# from eulearning.utils import vectorize_st, codensity
-# from eulearning.descriptors import RadonTransform, EulerCharacteristicProfile
-# import gudhi as gd
-#
-# te = TakensEmbedding(time_delay=1, dimension=dim)
-# b_embeddings = te.fit_transform(b_scaled)
-# a_embeddings = te.fit_transform(a_scaled)
-#
-# b_embeddings_flattened = b_embeddings.reshape(b_scaled.index.size, dim)
-# a_embeddings_flattened = a_embeddings.reshape(a_scaled.index.size, dim)
-#
-# b_ac = gd.AlphaComplex(b_embeddings_flattened)
-# b_st = b_ac.create_simplex_tree()
-# b_ = np.array([b_ac.get_point(i) for i in  range(b_st.num_vertices())])
-#
-# b_codensity_filt = codensity(b_)
-# b_vec_st = vectorize_st(b_st, filtrations=[b_codensity_filt])
-#
-# a_ac = gd.AlphaComplex(a_embeddings_flattened)
-# a_st = a_ac.create_simplex_tree()
-# a_ = np.array([a_ac.get_point(i) for i in  range(a_st.num_vertices())])
-#
-# a_codensity_filt = codensity(a_)
-# a_vec_st = vectorize_st(a_st, filtrations=[a_codensity_filt])
-#
-# b_euler_profile = EulerCharacteristicProfile(resolution=(500,500), val_ranges=[(0, 5), (0, 10)], pt_cld=True)
-# b_ecp = b_euler_profile.fit_transform(b_vec_st)
-#
-# a_euler_profile = EulerCharacteristicProfile(resolution=(500,500), val_ranges=[(0, 5), (0, 10)], pt_cld=True)
-# a_ecp = a_euler_profile.fit_transform(a_vec_st)
-#
-# b_extent = list(b_euler_profile.val_ranges[0])+list(b_euler_profile.val_ranges[1])
-# a_extent = list(a_euler_profile.val_ranges[0])+list(a_euler_profile.val_ranges[1])
-#
-# plt.figure()
-# plt.imshow(b_ecp, origin='lower', extent=b_extent, aspect='auto')
-# plt.title('ECP - Benign')
-# plt.colorbar(orientation='horizontal')
-# plt.show()
-#
-# plt.figure()
-# plt.imshow(a_ecp, origin='lower', extent=a_extent, aspect='auto')
-# plt.title('ECP - Attack')
-# plt.colorbar(orientation='horizontal')
-# plt.show()
+from eulearning.utils import vectorize_st, codensity
+from eulearning.descriptors import EulerCharacteristicProfile
+import gudhi as gd
+
+b_vec_sts = []
+for i in range(b_embeddings.shape[0]):
+    b_point_cloud = b_embeddings[i]
+    b_ac = gd.AlphaComplex(points=b_point_cloud)
+    b_st = b_ac.create_simplex_tree()
+    X_ = np.array([b_ac.get_point(i) for i in range(b_st.num_vertices())])
+    b_codensity_filt = codensity(X_)
+    b_vec_st = vectorize_st(b_st, filtrations=[b_codensity_filt])
+    b_vec_sts.append(b_vec_st)
+
+a_vec_sts = []
+for i in range(a_embeddings.shape[0]):
+    a_point_cloud = a_embeddings[i]
+    a_ac = gd.AlphaComplex(points=a_point_cloud)
+    a_st = a_ac.create_simplex_tree()
+    Y_ = np.array([a_ac.get_point(i) for i in range(a_st.num_vertices())])
+    a_codensity_filt = codensity(Y_)
+    a_vec_st = vectorize_st(a_st, filtrations=[a_codensity_filt])
+    a_vec_sts.append(a_vec_st)
+
+euler_profile = EulerCharacteristicProfile(resolution=(50,50), quantiles=[(0, 1), (0, 1)], pt_cld=True, normalize=False, flatten=True)
+b_ecp = euler_profile.fit_transform(b_vec_sts)
+a_ecp = euler_profile.fit_transform(a_vec_sts)
+extent = list(euler_profile.val_ranges[0])+list(euler_profile.val_ranges[1])
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+ax[0].imshow(b_ecp, origin='lower', extent=extent, aspect='auto')
+ax[0].set_title('Euler characteristic surface - Benign')
+ax[1].imshow(a_ecp, origin='lower', extent=extent, aspect='auto')
+ax[1].set_title('Euler characteristic surface - Attack')
+plt.show()
