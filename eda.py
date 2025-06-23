@@ -131,15 +131,15 @@ df_scaled = scaler.fit_transform(agg_df[atts])
 # plt.show()
 
 ### Testing different Mapper lenses
-mapper = km.KeplerMapper(verbose=1)
-lens1 = mapper.fit_transform(df_scaled, projection='l2norm')
-
-projector = ensemble.IsolationForest(random_state=42)
-projector.fit(df_scaled)
-lens2 = projector.decision_function(df_scaled)
-
-pca = PCA(n_components=1)
-lens3 = pca.fit_transform(df_scaled)
+# mapper = km.KeplerMapper(verbose=1)
+# lens1 = mapper.fit_transform(df_scaled, projection='l2norm')
+#
+# projector = ensemble.IsolationForest(random_state=42)
+# projector.fit(df_scaled)
+# lens2 = projector.decision_function(df_scaled)
+#
+# pca = PCA(n_components=1)
+# lens3 = pca.fit_transform(df_scaled)
 
 # fig, axs = plt.subplots(1, 2, figsize=(9,4))
 # axs[0].scatter(lens1,lens2,alpha=0.3)
@@ -152,40 +152,40 @@ lens3 = pca.fit_transform(df_scaled)
 # plt.show()
 
 ## Mapper
-uniques = agg_df['attack_cat'].unique()
-lens = np.c_[lens1, lens2]
-cover = Cover(n_cubes=20, perc_overlap=0.20)
-clusterer = DBSCAN(eps=0.5, min_samples=5)
-
-G = mapper.map(
-    lens,
-    df_scaled,
-    cover=cover,
-    clusterer=clusterer,
-)
-
-_ = mapper.visualize(
-    G,
-    custom_tooltips=agg_df['attack_cat'].values,
-    color_values=agg_df['attack_cat'].values,
-    color_function_name="Label",
-    path_html="mapper_unsw-nb15_agg.html",
-    X=df_scaled,
-    X_names=agg_df.columns,
-    lens=lens,
-)
+# uniques = agg_df['attack_cat'].unique()
+# lens = np.c_[lens1, lens2]
+# cover = Cover(n_cubes=20, perc_overlap=0.20)
+# clusterer = DBSCAN(eps=0.5, min_samples=5)
+#
+# G = mapper.map(
+#     lens,
+#     df_scaled,
+#     cover=cover,
+#     clusterer=clusterer,
+# )
+#
+# _ = mapper.visualize(
+#     G,
+#     custom_tooltips=agg_df['attack_cat'].values,
+#     color_values=agg_df['attack_cat'].values,
+#     color_function_name="Label",
+#     path_html="mapper_unsw-nb15_agg.html",
+#     X=df_scaled,
+#     X_names=agg_df.columns,
+#     lens=lens,
+# )
 
 ### Takens with separate benigns and attacks
-# dim = len(atts)
-#
-# b_sliced = b_agg[atts].iloc[:int(b_agg.index.size/10)]
-# a_sliced = a_agg[atts].iloc[:int(a_agg.index.size/10)]
-#
-# b_scaled = scaler.fit_transform(b_sliced)
-# b_scaled = pd.DataFrame(b_scaled, index=b_sliced.index, columns=atts)
-# a_scaled = scaler.fit_transform(a_sliced)
-# a_scaled = pd.DataFrame(a_scaled, index=a_sliced.index, columns=atts)
-#
+dim = len(atts)
+
+b_sliced = b_agg[atts].iloc[:int(b_agg.index.size)]
+a_sliced = a_agg[atts].iloc[:int(a_agg.index.size)]
+
+b_scaled = scaler.fit_transform(b_sliced)
+b_scaled = pd.DataFrame(b_scaled, index=b_sliced.index, columns=atts)
+a_scaled = scaler.fit_transform(a_sliced)
+a_scaled = pd.DataFrame(a_scaled, index=a_sliced.index, columns=atts)
+
 # te = TakensEmbedding(time_delay=1, dimension=3)
 # b_embeddings = te.fit_transform(b_scaled)
 # a_embeddings = te.fit_transform(a_scaled)
@@ -237,9 +237,54 @@ _ = mapper.visualize(
 
 
 ### Euler Characteristic Profile
-# from eulearning.utils import vectorize_st, codensity
-# from eulearning.descriptors import EulerCharacteristicProfile
-# import gudhi as gd
+from eulearning.utils import vectorize_st, codensity
+from eulearning.descriptors import RadonTransform, EulerCharacteristicProfile
+from gtda.time_series import SingleTakensEmbedding
+import gudhi as gd
+
+te = TakensEmbedding(time_delay=1, dimension=3)
+b_embeddings = te.fit_transform(b_scaled)
+a_embeddings = te.fit_transform(a_scaled)
+
+b_vec_sts = []
+for i in range(b_embeddings.shape[0]):
+    b_point_cloud = b_embeddings[i]
+    b_ac = gd.AlphaComplex(points=b_point_cloud)
+    b_st = b_ac.create_simplex_tree()
+    b_vec_st = vectorize_st(b_st)
+    b_vec_sts.append(b_vec_st)
+
+a_vec_sts = []
+for i in range(a_embeddings.shape[0]):
+    a_point_cloud = a_embeddings[i]
+    a_ac = gd.AlphaComplex(points=a_point_cloud)
+    a_st = a_ac.create_simplex_tree()
+    a_vec_st = vectorize_st(a_st)
+    a_vec_sts.append(a_vec_st)
+
+euler_curve = EulerCharacteristicProfile(resolution=(200,), quantiles=[(0, 0.3)], pt_cld=True, normalize=False, flatten=True)
+b_ecc = euler_curve.fit_transform(b_vec_sts)
+a_ecc = euler_curve.fit_transform(a_vec_sts)
+ecc_range = np.linspace(euler_curve.val_ranges[0][0], euler_curve.val_ranges[0][1], euler_curve.resolution[0])
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+for curve in b_ecc:
+    ax[0].plot(ecc_range, curve, alpha=0.3)
+ax[0].set_title('Euler Characteristic Curve (H0, H1, H2) benign')
+for curve in a_ecc:
+    ax[1].plot(ecc_range, curve, alpha=0.3)
+ax[1].set_title('Euler Characteristic Curve (H0, H1, H2) attack')
+plt.show()
+
+# Plotting mean curves
+plt.figure(figsize=(10, 5))
+mean_a_ecc = np.mean(a_ecc, axis=0)
+mean_b_ecc = np.mean(b_ecc, axis=0)
+plt.plot(ecc_range, mean_a_ecc, color='red', linewidth=2, label='Mean Attack ECC')
+plt.plot(ecc_range, mean_b_ecc, color='green', linewidth=2, label='Mean Benign ECC')
+plt.legend()
+plt.show()
+
 #
 # b_vec_sts = []
 # for i in range(b_embeddings.shape[0]):
